@@ -1,0 +1,36 @@
+{
+  "name": "guard-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "dev": "vite",
+    "format": "biome check --write .",
+    "gen:sdk": "o2t generate typescript",
+    "postinstall": "igit install",
+    "lint:all": "npm run format",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@doremijs/o2t": "^0.1.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "@doremijs/biome-config": "^0.1.5",
+    "@doremijs/igit-cli": "0.0.10-fix1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.2.2",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "unocss": "^66.5.12",
+    "vite": "^8.0.0-beta.7"
+  },
+  "engines": {
+    "node": ">=10.0.0"
+  }
+}
