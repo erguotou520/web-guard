@@ -2,9 +2,18 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fmt;
 use thiserror::Error;
+
+/// Error response structure for API documentation
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
+pub struct ErrorResponse {
+    pub code: String,
+    pub message: String,
+    pub details: Option<std::collections::HashMap<String, String>>,
+}
 
 /// Application error type
 #[derive(Debug, Error)]

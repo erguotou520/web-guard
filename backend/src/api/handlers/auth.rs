@@ -7,6 +7,7 @@ use serde_json::json;
 use uuid::Uuid;
 use chrono::{Utc, Duration as ChronoDuration};
 use sha2::{Sha256, Digest};
+use utoipa::ToSchema;
 
 use crate::api::routes::AppState;
 use crate::db::queries;
@@ -21,32 +22,32 @@ fn sha256_hash(input: &str) -> String {
 }
 
 /// Request/response types for auth endpoints
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, ToSchema)]
 pub struct RegisterRequestJson {
     pub email: String,
     pub password: String,
     pub full_name: Option<String>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, ToSchema)]
 pub struct LoginRequestJson {
     pub email: String,
     pub password: String,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, ToSchema)]
 pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct AuthResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub user: UserResponse,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, ToSchema)]
 pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
@@ -68,6 +69,16 @@ impl From<crate::db::models::User> for UserResponse {
 }
 
 /// Register a new user
+#[utoipa::path(
+    post,
+    path = "/api/auth/register",
+    tag = "认证",
+    request_body = RegisterRequestJson,
+    responses(
+        (status = 201, description = "注册成功", body = AuthResponse),
+        (status = 400, description = "请求参数错误", body = crate::error::ErrorResponse)
+    )
+)]
 pub async fn register(
     State(state): State<AppState>,
     Json(payload): Json<RegisterRequestJson>,
@@ -109,6 +120,16 @@ pub async fn register(
 }
 
 /// Login
+#[utoipa::path(
+    post,
+    path = "/api/auth/login",
+    tag = "认证",
+    request_body = LoginRequestJson,
+    responses(
+        (status = 200, description = "登录成功", body = AuthResponse),
+        (status = 401, description = "认证失败", body = crate::error::ErrorResponse)
+    )
+)]
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequestJson>,
@@ -154,6 +175,16 @@ pub async fn login(
 }
 
 /// Refresh access token
+#[utoipa::path(
+    post,
+    path = "/api/auth/refresh",
+    tag = "认证",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "刷新成功", body = AuthResponse),
+        (status = 401, description = "刷新令牌无效或已过期", body = crate::error::ErrorResponse)
+    )
+)]
 pub async fn refresh_token(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
@@ -211,6 +242,14 @@ pub async fn refresh_token(
 }
 
 /// Health check endpoint
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "认证",
+    responses(
+        (status = 200, description = "服务正常")
+    )
+)]
 pub async fn health_check() -> impl IntoResponse {
     Json(json!({
         "status": "healthy",

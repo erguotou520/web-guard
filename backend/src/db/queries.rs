@@ -1026,3 +1026,177 @@ pub async fn revoke_all_user_tokens(pool: &PgPool, user_id: Uuid) -> AppResult<(
 
     Ok(())
 }
+
+// ============================================================================
+// Enhanced Monitoring Queries
+// ============================================================================
+
+/// Get latest uptime snapshot for a domain
+pub async fn get_latest_uptime_snapshot(
+    pool: &PgPool,
+    domain_id: Uuid,
+) -> AppResult<Option<UptimeSnapshot>> {
+    sqlx::query_as::<_, UptimeSnapshot>(
+        r#"
+        SELECT * FROM uptime_snapshots
+        WHERE domain_id = $1
+        ORDER BY check_time DESC
+        LIMIT 1
+        "#
+    )
+    .bind(domain_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// Get uptime history for a domain with time bucketing
+/// Returns data points grouped by the specified interval
+pub async fn get_uptime_history(
+    pool: &PgPool,
+    domain_id: Uuid,
+    hours_back: i64,
+    interval_minutes: i64,
+) -> AppResult<Vec<UptimeSnapshot>> {
+    sqlx::query_as::<_, UptimeSnapshot>(
+        r#"
+        WITH time_buckets AS (
+            SELECT
+                date_trunc('minute',
+                    check_time - INTERVAL '1 minute' * (
+                        EXTRACT(MINUTE FROM check_time)::int % $3
+                    )
+                ) as bucket_time,
+                bool_and(is_up) as is_up,
+                COALESCE(avg(response_time_ms)::int, 0) as avg_response_time_ms,
+                max(status_code) as status_code,
+                (array_agg(id ORDER BY check_time DESC))[1] as id,
+                $1 as domain_id,
+                max(check_time) as check_time,
+                max(consecutive_failures) as consecutive_failures,
+                (array_agg(error_type ORDER BY check_time DESC))[1] as error_type
+            FROM uptime_snapshots
+            WHERE domain_id = $1
+              AND check_time >= NOW() - INTERVAL '1 hour' * $2
+            GROUP BY bucket_time
+            ORDER BY bucket_time DESC
+        )
+        SELECT
+            id, domain_id, check_time, status_code,
+            avg_response_time_ms as response_time_ms,
+            is_up, error_type, consecutive_failures
+        FROM time_buckets
+        "#
+    )
+    .bind(domain_id)
+    .bind(hours_back)
+    .bind(interval_minutes)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// Compute and save uptime aggregate statistics
+pub async fn compute_uptime_aggregate(
+    pool: &PgPool,
+    domain_id: Uuid,
+    period_start: chrono::DateTime<chrono::Utc>,
+    period_end: chrono::DateTime<chrono::Utc>,
+    period_type: &str,
+) -> AppResult<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO uptime_aggregates (
+            domain_id, period_type, period_start, period_end,
+            uptime_percentage, avg_response_time_ms,
+            total_checks, successful_checks
+        )
+        SELECT
+            $1 as domain_id,
+            $2 as period_type,
+            $3 as period_start,
+            $4 as period_end,
+            CASE
+                WHEN COUNT(*) = 0 THEN 0
+                ELSE (COUNT(*) FILTER (WHERE is_up = true)::float / COUNT(*)::float * 100)
+            END as uptime_percentage,
+            COALESCE(AVG(response_time_ms) FILTER (WHERE is_up = true), 0)::int as avg_response_time_ms,
+            COUNT(*) as total_checks,
+            COUNT(*) FILTER (WHERE is_up = true) as successful_checks
+        FROM uptime_snapshots
+        WHERE domain_id = $1
+          AND check_time >= $3
+          AND check_time < $4
+        ON CONFLICT (domain_id, period_start, period_type)
+        DO UPDATE SET
+            period_end = EXCLUDED.period_end,
+            uptime_percentage = EXCLUDED.uptime_percentage,
+            avg_response_time_ms = EXCLUDED.avg_response_time_ms,
+            total_checks = EXCLUDED.total_checks,
+            successful_checks = EXCLUDED.successful_checks
+        "#
+    )
+    .bind(domain_id)
+    .bind(period_type)
+    .bind(period_start)
+    .bind(period_end)
+    .execute(pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(())
+}
+
+/// Get uptime aggregates for a domain
+pub async fn get_uptime_aggregates(
+    pool: &PgPool,
+    domain_id: Uuid,
+    period_type: &str,
+    limit: i64,
+) -> AppResult<Vec<UptimeAggregate>> {
+    sqlx::query_as::<_, UptimeAggregate>(
+        r#"
+        SELECT * FROM uptime_aggregates
+        WHERE domain_id = $1 AND period_type = $2
+        ORDER BY period_start DESC
+        LIMIT $3
+        "#
+    )
+    .bind(domain_id)
+    .bind(period_type)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// Get latest uptime aggregate for a domain (typically used for dashboard)
+pub async fn get_latest_uptime_aggregate(
+    pool: &PgPool,
+    domain_id: Uuid,
+    period_type: &str,
+) -> AppResult<Option<UptimeAggregate>> {
+    sqlx::query_as::<_, UptimeAggregate>(
+        r#"
+        SELECT * FROM uptime_aggregates
+        WHERE domain_id = $1 AND period_type = $2
+        ORDER BY period_start DESC
+        LIMIT 1
+        "#
+    )
+    .bind(domain_id)
+    .bind(period_type)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// List all active domains (for scheduler)
+pub async fn list_all_active_domains(pool: &PgPool) -> AppResult<Vec<Domain>> {
+    sqlx::query_as::<_, Domain>(
+        "SELECT * FROM domains WHERE is_active = true ORDER BY created_at ASC"
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}

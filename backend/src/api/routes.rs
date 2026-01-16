@@ -1,11 +1,15 @@
 use axum::{
     Router,
     routing::{get, post, put, delete},
+    Json,
 };
 use sqlx::PgPool;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::{JwtService, auth_middleware};
 use crate::api::handlers;
+use crate::api::openapi::ApiDoc;
 use crate::Config;
 
 /// Application state shared across all handlers
@@ -14,6 +18,11 @@ pub struct AppState {
     pub pool: PgPool,
     pub jwt_service: JwtService,
     pub config: Config,
+}
+
+/// Handler to serve OpenAPI JSON
+async fn openapi_json() -> Json<utoipa::openapi::OpenApi> {
+    Json(ApiDoc::openapi())
 }
 
 /// Create the main application router
@@ -32,10 +41,12 @@ pub fn create_router(
     let public_routes = Router::new()
         // Health check
         .route("/health", get(handlers::auth::health_check))
+        // OpenAPI JSON
+        .route("/api-docs/openapi.json", get(openapi_json))
         // Auth routes
-        .route("/auth/register", post(handlers::auth::register))
-        .route("/auth/login", post(handlers::auth::login))
-        .route("/auth/refresh", post(handlers::auth::refresh_token));
+        .route("/api/auth/register", post(handlers::auth::register))
+        .route("/api/auth/login", post(handlers::auth::login))
+        .route("/api/auth/refresh", post(handlers::auth::refresh_token));
 
     // Protected routes (auth required)
     let protected_routes = Router::new()
@@ -55,10 +66,17 @@ pub fn create_router(
         .route("/api/domains/:id", get(handlers::domains::get_domain))
         .route("/api/domains/:id", put(handlers::domains::update_domain))
         .route("/api/domains/:id", delete(handlers::domains::delete_domain))
+        // Monitoring routes
+        .route("/api/domains/:id/monitoring/uptime/latest", get(handlers::monitoring::get_latest_uptime))
+        .route("/api/domains/:id/monitoring/ssl/latest", get(handlers::monitoring::get_latest_ssl))
+        .route("/api/domains/:id/monitoring/uptime/history", get(handlers::monitoring::get_uptime_history))
+        .route("/api/domains/:id/monitoring/uptime/aggregate", get(handlers::monitoring::get_uptime_aggregate))
+        .route("/api/domains/:id/monitoring/check", post(handlers::monitoring::trigger_check))
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), auth_middleware));
 
-    // Combine all routes
-    public_routes
+    // Combine all routes with state
+    Router::new()
+        .merge(public_routes)
         .merge(protected_routes)
         .with_state(state)
 }

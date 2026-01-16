@@ -136,7 +136,7 @@ impl Config {
         // Server
         cfg = cfg
             .set_default("server.host", "0.0.0.0")?
-            .set_default("server.port", 8080)?
+            .set_default("server.port", 9001)?
             .set_default("server.frontend_dist_path", "../frontend/dist")?;
 
         // Auth
@@ -224,7 +224,7 @@ mod tests {
 
         assert_eq!(config.database.url, "postgresql://localhost/test");
         assert_eq!(config.auth.jwt_secret, "test-secret");
-        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.port, 9001);
         assert_eq!(config.workers.pool_size, 10);
     }
 }

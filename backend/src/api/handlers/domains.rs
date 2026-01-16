@@ -6,14 +6,65 @@ use axum::{
 };
 use serde_json::json;
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 use crate::api::routes::AppState;
 use crate::db::queries;
+use crate::db::models::Domain;
 use crate::error::{AppError, AppResult};
 use crate::auth::AuthExtractor;
 use validator::Validate;
 
+/// Query parameters for domain endpoints
+#[derive(serde::Deserialize, ToSchema)]
+pub struct DomainQueryParams {
+    pub org_id: Option<Uuid>,
+}
+
+// Request types
+#[derive(serde::Deserialize, Validate, ToSchema)]
+pub struct CreateDomainRequest {
+    #[validate(length(min = 1, max = 255))]
+    pub name: String,
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+pub struct UpdateDomainRequest {
+    pub is_active: Option<bool>,
+}
+
+// Response types
+#[derive(serde::Serialize, ToSchema)]
+pub struct DomainResponse {
+    pub data: Domain,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct DomainsResponse {
+    pub data: Vec<Domain>,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct DomainCreateResponse {
+    pub data: Domain,
+    pub monitors_created: Vec<String>,
+}
+
 /// List domains for an organization
+#[utoipa::path(
+    get,
+    path = "/api/domains",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("org_id" = Option<Uuid>, Query, description = "组织ID（可选，默认使用用户的默认组织）")
+    ),
+    responses(
+        (status = 200, description = "获取成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员")
+    )
+)]
 pub async fn list_domains(
     State(state): State<AppState>,
     Query(params): Query<DomainQueryParams>,
@@ -46,6 +97,22 @@ pub async fn list_domains(
 }
 
 /// Create a new domain
+#[utoipa::path(
+    post,
+    path = "/api/domains",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("org_id" = Option<Uuid>, Query, description = "组织ID（可选，默认使用用户的默认组织）")
+    ),
+    request_body = CreateDomainRequest,
+    responses(
+        (status = 201, description = "创建成功，自动创建 SSL 和 Uptime 监控器"),
+        (status = 400, description = "请求参数错误"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限创建域名")
+    )
+)]
 pub async fn create_domain(
     State(state): State<AppState>,
     Query(params): Query<DomainQueryParams>,
@@ -110,6 +177,21 @@ pub async fn create_domain(
 }
 
 /// Get domain by ID
+#[utoipa::path(
+    get,
+    path = "/api/domains/{id}",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "域名ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员"),
+        (status = 404, description = "域名不存在")
+    )
+)]
 pub async fn get_domain(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -132,6 +214,22 @@ pub async fn get_domain(
 }
 
 /// Update domain
+#[utoipa::path(
+    put,
+    path = "/api/domains/{id}",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "域名ID")
+    ),
+    request_body = UpdateDomainRequest,
+    responses(
+        (status = 200, description = "更新成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限更新域名"),
+        (status = 404, description = "域名不存在")
+    )
+)]
 pub async fn update_domain(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -166,6 +264,21 @@ pub async fn update_domain(
 }
 
 /// Delete domain
+#[utoipa::path(
+    delete,
+    path = "/api/domains/{id}",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "域名ID")
+    ),
+    responses(
+        (status = 204, description = "删除成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限删除域名"),
+        (status = 404, description = "域名不存在")
+    )
+)]
 pub async fn delete_domain(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -185,22 +298,4 @@ pub async fn delete_domain(
     queries::delete_domain(&state.pool, id).await?;
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// Query parameters for domain endpoints
-#[derive(serde::Deserialize)]
-pub struct DomainQueryParams {
-    pub org_id: Option<Uuid>,
-}
-
-// Request types
-#[derive(serde::Deserialize, Validate)]
-pub struct CreateDomainRequest {
-    #[validate(length(min = 1, max = 255))]
-    pub name: String,
-}
-
-#[derive(serde::Deserialize)]
-pub struct UpdateDomainRequest {
-    pub is_active: Option<bool>,
 }

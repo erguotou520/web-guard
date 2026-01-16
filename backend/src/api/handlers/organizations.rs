@@ -5,14 +5,72 @@ use axum::{
     Json as JsonPayload,
 };
 use uuid::Uuid;
+use utoipa::ToSchema;
 
 use crate::api::routes::AppState;
-use crate::db::models::{OrganizationMember, MemberRole};
+use crate::db::models::{OrganizationMember, MemberRole, Organization};
 use crate::db::queries;
 use crate::error::{AppError, AppResult};
 use crate::auth::AuthExtractor;
 
+// Request types
+#[derive(serde::Deserialize, ToSchema)]
+pub struct CreateOrganizationRequest {
+    pub name: String,
+    pub slug: Option<String>,
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+pub struct UpdateOrganizationRequest {
+    pub name: Option<String>,
+    pub webhook_url: Option<String>,
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+pub struct AddMemberRequest {
+    pub email: String,
+    pub role: MemberRole,
+}
+
+#[derive(serde::Deserialize, ToSchema)]
+pub struct UpdateMemberRoleRequest {
+    pub role: MemberRole,
+}
+
+// Response wrapper types
+#[derive(serde::Serialize, ToSchema)]
+pub struct OrganizationResponse {
+    pub data: Organization,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct OrganizationsResponse {
+    pub data: Vec<Organization>,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct MemberResponse {
+    pub data: OrganizationMember,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct MembersResponse {
+    pub data: Vec<OrganizationMember>,
+}
+
 /// Create a new organization
+#[utoipa::path(
+    post,
+    path = "/api/organizations",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    request_body = CreateOrganizationRequest,
+    responses(
+        (status = 201, description = "创建成功"),
+        (status = 400, description = "请求参数错误"),
+        (status = 401, description = "未授权")
+    )
+)]
 pub async fn create_organization(
     State(state): State<AppState>,
     auth: AuthExtractor,
@@ -38,6 +96,16 @@ pub async fn create_organization(
 }
 
 /// List user's organizations
+#[utoipa::path(
+    get,
+    path = "/api/organizations",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    responses(
+        (status = 200, description = "获取成功"),
+        (status = 401, description = "未授权")
+    )
+)]
 pub async fn list_organizations(
     State(state): State<AppState>,
     auth: AuthExtractor,
@@ -52,6 +120,21 @@ pub async fn list_organizations(
 }
 
 /// Get organization by ID
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限访问该组织"),
+        (status = 404, description = "组织不存在")
+    )
+)]
 pub async fn get_organization(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -74,6 +157,21 @@ pub async fn get_organization(
 }
 
 /// Update organization
+#[utoipa::path(
+    put,
+    path = "/api/organizations/{id}",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    request_body = UpdateOrganizationRequest,
+    responses(
+        (status = 200, description = "更新成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限更新组织")
+    )
+)]
 pub async fn update_organization(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -119,6 +217,20 @@ pub async fn update_organization(
 }
 
 /// Delete organization
+#[utoipa::path(
+    delete,
+    path = "/api/organizations/{id}",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    responses(
+        (status = 204, description = "删除成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限删除组织")
+    )
+)]
 pub async fn delete_organization(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -138,6 +250,20 @@ pub async fn delete_organization(
 }
 
 /// List organization members
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/members",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员")
+    )
+)]
 pub async fn list_members(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -171,6 +297,22 @@ pub async fn list_members(
 }
 
 /// Add member to organization
+#[utoipa::path(
+    post,
+    path = "/api/organizations/{id}/members",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    request_body = AddMemberRequest,
+    responses(
+        (status = 201, description = "添加成功"),
+        (status = 400, description = "用户已是成员或不存在"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限添加成员")
+    )
+)]
 pub async fn add_member(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -229,6 +371,22 @@ pub async fn add_member(
 }
 
 /// Remove member from organization
+#[utoipa::path(
+    delete,
+    path = "/api/organizations/{id}/members/{user_id}",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID"),
+        ("user_id" = Uuid, Path, description = "用户ID")
+    ),
+    responses(
+        (status = 204, description = "移除成功"),
+        (status = 400, description = "无法移除组织所有者"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限移除成员")
+    )
+)]
 pub async fn remove_member(
     State(state): State<AppState>,
     Path((id, user_id)): Path<(Uuid, Uuid)>,
@@ -262,6 +420,23 @@ pub async fn remove_member(
 }
 
 /// Update member role
+#[utoipa::path(
+    put,
+    path = "/api/organizations/{id}/members/{user_id}/role",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID"),
+        ("user_id" = Uuid, Path, description = "用户ID")
+    ),
+    request_body = UpdateMemberRoleRequest,
+    responses(
+        (status = 204, description = "更新成功"),
+        (status = 400, description = "无法修改所有者角色"),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "无权限修改角色")
+    )
+)]
 pub async fn update_member_role(
     State(state): State<AppState>,
     Path((id, user_id)): Path<(Uuid, Uuid)>,
@@ -294,28 +469,4 @@ pub async fn update_member_role(
         .map_err(|e| AppError::internal(format!("Failed to update member role: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-// Request types
-#[derive(serde::Deserialize)]
-pub struct CreateOrganizationRequest {
-    pub name: String,
-    pub slug: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct UpdateOrganizationRequest {
-    pub name: Option<String>,
-    pub webhook_url: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
-pub struct AddMemberRequest {
-    pub email: String,
-    pub role: MemberRole,
-}
-
-#[derive(serde::Deserialize)]
-pub struct UpdateMemberRoleRequest {
-    pub role: MemberRole,
 }

@@ -1,7 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import apiClient from '../api/client'
-import type { User, Organization, LoginRequest, RegisterRequest, AuthResponse } from '../api/types'
+
+interface User {
+  id: string
+  email: string
+  full_name?: string
+  created_at: string
+  last_login_at?: string
+}
 
 interface AuthState {
   // State
@@ -14,12 +20,10 @@ interface AuthState {
   error: string | null
 
   // Actions
-  login: (credentials: LoginRequest) => Promise<void>
-  register: (data: RegisterRequest) => Promise<void>
+  setToken: (accessToken: string, refreshToken?: string) => void
+  setUser: (user: User) => void
   logout: () => void
-  refreshAccessToken: () => Promise<void>
   setCurrentOrg: (orgId: string) => void
-  updateUser: (user: User) => void
   clearError: () => void
 }
 
@@ -35,59 +39,22 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
-      // Login
-      login: async (credentials: LoginRequest) => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await apiClient.post<AuthResponse>('/auth/login', credentials)
-          const { access_token, refresh_token, user } = response.data
-
-          localStorage.setItem('access_token', access_token)
-          localStorage.setItem('refresh_token', refresh_token)
-
-          set({
-            token: access_token,
-            refreshToken: refresh_token,
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          })
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : 'Login failed'
-          set({ error: message, isLoading: false })
-          throw error
-        }
+      // Set token
+      setToken: (accessToken: string, refreshToken?: string) => {
+        set({
+          token: accessToken,
+          refreshToken: refreshToken || null,
+          isAuthenticated: !!accessToken
+        })
       },
 
-      // Register
-      register: async (data: RegisterRequest) => {
-        set({ isLoading: true, error: null })
-        try {
-          const response = await apiClient.post<AuthResponse>('/auth/register', data)
-          const { access_token, refresh_token, user } = response.data
-
-          localStorage.setItem('access_token', access_token)
-          localStorage.setItem('refresh_token', refresh_token)
-
-          set({
-            token: access_token,
-            refreshToken: refresh_token,
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          })
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : 'Registration failed'
-          set({ error: message, isLoading: false })
-          throw error
-        }
+      // Set user
+      setUser: (user: User) => {
+        set({ user })
       },
 
       // Logout
       logout: () => {
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
-        localStorage.removeItem('current_org_id')
         set({
           token: null,
           refreshToken: null,
@@ -97,37 +64,9 @@ export const useAuthStore = create<AuthState>()(
         })
       },
 
-      // Refresh access token
-      refreshAccessToken: async () => {
-        const { refreshToken } = get()
-        if (!refreshToken) {
-          throw new Error('No refresh token available')
-        }
-
-        try {
-          const response = await apiClient.post<{ access_token: string }>('/auth/refresh', {
-            refresh_token: refreshToken,
-          })
-          const { access_token } = response.data
-
-          localStorage.setItem('access_token', access_token)
-          set({ token: access_token })
-        } catch {
-          // Refresh failed - logout
-          get().logout()
-          throw new Error('Session expired. Please login again.')
-        }
-      },
-
       // Set current organization
       setCurrentOrg: (orgId: string) => {
-        localStorage.setItem('current_org_id', orgId)
         set({ currentOrgId: orgId })
-      },
-
-      // Update user info
-      updateUser: (user: User) => {
-        set({ user })
       },
 
       // Clear error
@@ -143,6 +82,12 @@ export const useAuthStore = create<AuthState>()(
         currentOrgId: state.currentOrgId,
         user: state.user,
       }),
+      onRehydrateStorage: () => (state) => {
+        // 在重新水化后，根据 token 设置 isAuthenticated
+        if (state && state.token) {
+          state.isAuthenticated = true
+        }
+      },
     }
   )
 )

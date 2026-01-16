@@ -47,6 +47,21 @@ impl MonitorScheduler {
         let mut ticker = interval(Duration::from_secs(poll_interval_secs));
         ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+        // Separate ticker for aggregate computation (every 30 minutes)
+        let mut aggregate_ticker = interval(Duration::from_secs(1800)); // 30 minutes
+        aggregate_ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
+        // Spawn aggregate computation task
+        let pool_clone = self.pool.clone();
+        tokio::spawn(async move {
+            loop {
+                aggregate_ticker.tick().await;
+                if let Err(e) = Self::compute_aggregates(pool_clone.clone()).await {
+                    eprintln!("Failed to compute aggregates: {}", e);
+                }
+            }
+        });
+
         loop {
             ticker.tick().await;
 
@@ -285,6 +300,76 @@ impl MonitorScheduler {
             }
         });
 
+        Ok(())
+    }
+
+    /// Compute and save uptime aggregates for all active domains
+    async fn compute_aggregates(pool: PgPool) -> AppResult<()> {
+        use chrono::{Datelike, Timelike, Utc};
+
+        tracing::info!("Computing uptime aggregates...");
+
+        // Get all active domains
+        let domains = queries::list_all_active_domains(&pool).await?;
+
+        let now = Utc::now();
+
+        for domain in domains {
+            // Compute hourly aggregate for the last completed hour
+            let current_hour = now.with_minute(0).and_then(|dt| dt.with_second(0)).and_then(|dt| dt.with_nanosecond(0));
+            if let Some(hour_end) = current_hour {
+                let hour_start = hour_end - chrono::Duration::hours(1);
+
+                if let Err(e) = queries::compute_uptime_aggregate(
+                    &pool,
+                    domain.id,
+                    hour_start,
+                    hour_end,
+                    "hour",
+                ).await {
+                    eprintln!("Failed to compute hourly aggregate for domain {}: {}", domain.id, e);
+                }
+            }
+
+            // Compute daily aggregate for the last completed day (once per day)
+            // Only compute if it's the first hour of the day
+            if now.hour() == 0 {
+                if let Some(day_end) = now.date_naive().and_hms_opt(0, 0, 0) {
+                    let day_end = day_end.and_utc();
+                    let day_start = day_end - chrono::Duration::days(1);
+
+                    if let Err(e) = queries::compute_uptime_aggregate(
+                        &pool,
+                        domain.id,
+                        day_start,
+                        day_end,
+                        "day",
+                    ).await {
+                        eprintln!("Failed to compute daily aggregate for domain {}: {}", domain.id, e);
+                    }
+                }
+            }
+
+            // Compute weekly aggregate (once per week on Sunday)
+            if now.weekday() == chrono::Weekday::Sun && now.hour() == 0 {
+                if let Some(week_end) = now.date_naive().and_hms_opt(0, 0, 0) {
+                    let week_end = week_end.and_utc();
+                    let week_start = week_end - chrono::Duration::weeks(1);
+
+                    if let Err(e) = queries::compute_uptime_aggregate(
+                        &pool,
+                        domain.id,
+                        week_start,
+                        week_end,
+                        "week",
+                    ).await {
+                        eprintln!("Failed to compute weekly aggregate for domain {}: {}", domain.id, e);
+                    }
+                }
+            }
+        }
+
+        tracing::info!("Finished computing uptime aggregates");
         Ok(())
     }
 }

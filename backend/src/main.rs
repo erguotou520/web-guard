@@ -44,6 +44,19 @@ async fn main() -> anyhow::Result<()> {
         config.auth.refresh_token_duration,
     );
 
+    // Create and start monitoring scheduler
+    tracing::info!("Starting monitoring scheduler...");
+    let scheduler = web_guard::monitors::MonitorScheduler::new(
+        pool.clone(),
+        config.clone()
+    );
+    let scheduler_handle = tokio::spawn(async move {
+        if let Err(e) = scheduler.start().await {
+            tracing::error!("Monitor scheduler error: {}", e);
+        }
+    });
+    tracing::info!("Monitoring scheduler started");
+
     // Build application router
     let app = create_router(pool, jwt_service, config.clone())
         .layer(

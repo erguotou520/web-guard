@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
+use utoipa::ToSchema;
 
 // ============================================================================
 // User & Organization Models
 // ============================================================================
 
 /// User account
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
@@ -21,7 +22,7 @@ pub struct User {
 }
 
 /// Organization (team)
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Organization {
     pub id: Uuid,
     pub name: String,
@@ -35,7 +36,7 @@ pub struct Organization {
 }
 
 /// Organization member with role
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct OrganizationMember {
     pub id: Uuid,
     pub organization_id: Uuid,
@@ -45,7 +46,7 @@ pub struct OrganizationMember {
 }
 
 /// Member role in an organization
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, sqlx::Type, ToSchema)]
 #[sqlx(type_name = "varchar", rename_all = "lowercase")]
 pub enum MemberRole {
     Owner,
@@ -98,7 +99,7 @@ impl std::str::FromStr for MemberRole {
 // ============================================================================
 
 /// Domain being monitored
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Domain {
     pub id: Uuid,
     pub organization_id: Uuid,
@@ -115,6 +116,7 @@ pub struct Monitor {
     pub id: Uuid,
     pub domain_id: Uuid,
     #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
     pub monitor_type: MonitorType,
     pub is_enabled: bool,
     pub config: serde_json::Value,
