@@ -8,7 +8,7 @@ use uuid::Uuid;
 use utoipa::ToSchema;
 
 use crate::api::routes::AppState;
-use crate::db::models::{OrganizationMember, MemberRole, Organization};
+use crate::db::models::{OrganizationMember, MemberRole, Organization, OrganizationStats, Alert};
 use crate::db::queries;
 use crate::error::{AppError, AppResult};
 use crate::auth::AuthExtractor;
@@ -56,6 +56,16 @@ pub struct MemberResponse {
 #[derive(serde::Serialize, ToSchema)]
 pub struct MembersResponse {
     pub data: Vec<OrganizationMember>,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct OrganizationStatsResponse {
+    pub data: OrganizationStats,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct AlertsResponse {
+    pub data: Vec<Alert>,
 }
 
 /// Create a new organization
@@ -469,4 +479,81 @@ pub async fn update_member_role(
         .map_err(|e| AppError::internal(format!("Failed to update member role: {}", e)))?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Get organization statistics
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/stats",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功", body = OrganizationStatsResponse),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员")
+    )
+)]
+pub async fn get_organization_stats(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    auth: AuthExtractor,
+) -> AppResult<impl IntoResponse> {
+    // Check if user is a member
+    let is_member = queries::is_organization_member(&state.pool, id, auth.0.user_id).await?;
+    if !is_member {
+        return Err(AppError::authorization("You are not a member of this organization"));
+    }
+
+    let stats = queries::get_organization_stats(&state.pool, id).await?;
+
+    let response = serde_json::json!({
+        "data": stats
+    });
+
+    Ok(Json(response))
+}
+
+/// List organization alerts
+#[utoipa::path(
+    get,
+    path = "/api/organizations/{id}/alerts",
+    tag = "组织",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "组织ID"),
+        ("limit" = Option<i32>, Query, description = "返回记录数量限制")
+    ),
+    responses(
+        (status = 200, description = "获取成功", body = AlertsResponse),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员")
+    )
+)]
+pub async fn list_organization_alerts(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    auth: AuthExtractor,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> AppResult<impl IntoResponse> {
+    // Check if user is a member
+    let is_member = queries::is_organization_member(&state.pool, id, auth.0.user_id).await?;
+    if !is_member {
+        return Err(AppError::authorization("You are not a member of this organization"));
+    }
+
+    // Parse limit parameter (default to 100)
+    let limit = params.get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(100);
+
+    let alerts = queries::list_organization_alerts(&state.pool, id, limit).await?;
+
+    let response = serde_json::json!({
+        "data": alerts
+    });
+
+    Ok(Json(response))
 }

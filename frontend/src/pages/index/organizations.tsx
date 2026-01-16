@@ -48,8 +48,9 @@ export default function Organizations() {
   // Fetch organizations
   const { data: organizations = [], loading, refresh } = useRequest(async () => {
     const { data, error } = await client.get('/api/organizations')
-    if (!error && data) {
-      return (data as Organization[]) || []
+    console.log('Organizations API response:', { data, error })
+    if (!error && data?.data) {
+      return (data.data as Organization[]) || []
     }
     return []
   })
@@ -61,8 +62,9 @@ export default function Organizations() {
       const { data, error } = await client.get('/api/organizations/{id}/members', {
         params: { id: selectedOrg.id }
       })
-      if (!error && data) {
-        return (data as OrganizationMember[]) || []
+      console.log('Members API response:', { data, error })
+      if (!error && data?.data) {
+        return (data.data as OrganizationMember[]) || []
       }
       return []
     },
@@ -254,6 +256,13 @@ export default function Organizations() {
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-matrix" />
+          </div>
+        )}
+        {!loading && organizations.length === 0 && (
+          <div className="py-12 text-center">
+            <Building2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+            <p className="text-muted-foreground text-sm">暂无组织</p>
+            <p className="text-muted-foreground/60 text-xs mt-1">点击"创建组织"开始</p>
           </div>
         )}
       </Card>

@@ -20,27 +20,25 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 
+// Updated type to match DomainWithStatus from API
 interface Domain {
   id: string
-  name: string
+  name: string // display_name
+  url: string // actual URL
   normalized_name: string
   organization_id: string
   is_active: boolean
   created_at: string
   updated_at: string
-  // Monitoring data (will be populated from API)
-  ssl_status?: {
-    is_valid: boolean
-    days_until_expiry?: number
-    is_expiring_soon?: boolean
-    is_expired?: boolean
-  }
-  uptime_status?: {
-    is_up: boolean
-    response_time_ms?: number
-    status_code?: number
-    consecutive_failures?: number
-  }
+  // Monitoring data from API
+  uptime_is_up?: boolean | null
+  uptime_response_time_ms?: number | null
+  uptime_status_code?: number | null
+  uptime_consecutive_failures?: number | null
+  ssl_is_valid?: boolean | null
+  ssl_days_until_expiry?: number | null
+  ssl_is_expiring_soon?: boolean | null
+  ssl_is_expired?: boolean | null
 }
 
 export default function Domains() {
@@ -50,51 +48,54 @@ export default function Domains() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState<string | undefined>()
   const [newDomainName, setNewDomainName] = useState('')
+  const [newDomainUrl, setNewDomainUrl] = useState('')
 
-  // Fetch domains (with optional org_id filter)
-  const { data: domains = [], loading, refresh } = useRequest(async () => {
-    const { data, error } = await client.get('/api/domains', {
-      query: selectedOrgId ? { org_id: selectedOrgId } : undefined
-    })
-    if (!error && data) {
-      return (data as Domain[]) || []
+  // Fetch domains with monitoring status
+  const { data: domains = [], loading, refresh } = useRequest(
+    async () => {
+      const { data, error } = await client.get('/api/domains', {
+        query: selectedOrgId ? { org_id: selectedOrgId } : undefined
+      })
+      if (!error && data?.data) {
+        return (data.data as Domain[]) || []
+      }
+      return []
+    },
+    {
+      refreshDeps: [selectedOrgId],
+      pollingInterval: 60000, // Refresh every 60 seconds
     }
-    return []
-  })
+  )
 
   // Fetch organizations for dropdown
   const { data: organizations = [] } = useRequest(async () => {
     const { data, error } = await client.get('/api/organizations')
-    if (!error && data) {
-      return (data as Array<{ id: string; name: string; slug: string }>) || []
+    if (!error && data?.data) {
+      return (data.data as Array<{ id: string; name: string; slug: string }>) || []
     }
     return []
   })
 
-  // Create domain
-  const { loading: creating, run: createDomain } = useRequest(async () => {
-    const { error } = await client.post('/api/domains', {
-      query: selectedOrgId ? { org_id: selectedOrgId } : undefined,
-      body: { name: newDomainName }
-    })
+  // Create domain with display_name and url
+  const { loading: creating, run: createDomain } = useRequest(
+    async () => {
+      const { error } = await client.post('/api/domains', {
+        query: selectedOrgId ? { org_id: selectedOrgId } : undefined,
+        body: {
+          display_name: newDomainName,
+          url: newDomainUrl
+        }
+      })
 
-    if (!error) {
-      setIsCreateModalOpen(false)
-      setNewDomainName('')
-      refresh()
-    }
-  })
-
-  // Delete domain
-  const { loading: deleting, run: deleteDomain } = useRequest(async (id: string) => {
-    const { error } = await client.delete('/api/domains/{id}', {
-      params: { id }
-    })
-
-    if (!error) {
-      refresh()
-    }
-  })
+      if (!error) {
+        setIsCreateModalOpen(false)
+        setNewDomainName('')
+        setNewDomainUrl('')
+        refresh()
+      }
+    },
+    { manual: true }
+  )
 
   const handleSort = (column: string, direction: 'asc' | 'desc') => {
     setSortColumn(column)
@@ -123,7 +124,7 @@ export default function Domains() {
               {row.name}
             </span>
             <span className="text-xs text-muted-foreground font-mono">
-              {row.normalized_name}
+              {row.url}
             </span>
           </div>
           {!row.is_active && (
@@ -139,13 +140,14 @@ export default function Domains() {
       title: 'SSL 证书',
       sortable: false,
       render: (_: any, row: Domain) => {
-        if (!row.ssl_status) {
+        // Check if SSL data exists
+        if (row.ssl_is_valid === null || row.ssl_is_valid === undefined) {
           return <span className="text-xs text-muted-foreground">检查中...</span>
         }
         return (
           <SSLStatusBadge
-            isValid={row.ssl_status.is_valid}
-            daysUntilExpiry={row.ssl_status.days_until_expiry}
+            isValid={row.ssl_is_valid}
+            daysUntilExpiry={row.ssl_days_until_expiry}
           />
         )
       }
@@ -155,28 +157,28 @@ export default function Domains() {
       title: '状态与响应',
       sortable: false,
       render: (_: any, row: Domain) => {
-        if (!row.uptime_status) {
+        // Check if uptime data exists
+        if (row.uptime_is_up === null || row.uptime_is_up === undefined) {
           return <span className="text-xs text-muted-foreground">检查中...</span>
         }
-        const { is_up, response_time_ms, status_code } = row.uptime_status
 
         return (
           <div className="flex items-center gap-3">
             <StatusBadge
-              status={is_up ? 'online' : 'offline'}
-              text={is_up ? '在线' : '离线'}
+              status={row.uptime_is_up ? 'online' : 'offline'}
+              text={row.uptime_is_up ? '在线' : '离线'}
             />
-            {response_time_ms !== undefined && response_time_ms !== null && (
+            {row.uptime_response_time_ms !== undefined && row.uptime_response_time_ms !== null && (
               <div className="flex items-center gap-1 text-xs font-mono">
-                <Zap className={`w-3 h-3 ${response_time_ms < 200 ? 'text-success' : response_time_ms < 500 ? 'text-warning' : 'text-error'}`} />
-                <span className={response_time_ms < 200 ? 'text-success' : response_time_ms < 500 ? 'text-warning' : 'text-error'}>
-                  {response_time_ms}ms
+                <Zap className={`w-3 h-3 ${row.uptime_response_time_ms < 200 ? 'text-success' : row.uptime_response_time_ms < 500 ? 'text-warning' : 'text-error'}`} />
+                <span className={row.uptime_response_time_ms < 200 ? 'text-success' : row.uptime_response_time_ms < 500 ? 'text-warning' : 'text-error'}>
+                  {row.uptime_response_time_ms}ms
                 </span>
               </div>
             )}
-            {status_code && (
+            {row.uptime_status_code && (
               <code className="text-xs px-1.5 py-0.5 bg-muted border border-border">
-                {status_code}
+                {row.uptime_status_code}
               </code>
             )}
           </div>
@@ -204,14 +206,6 @@ export default function Domains() {
             onClick={() => navigate(`/domains/${row.id}`)}
           >
             详情
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => deleteDomain(row.id)}
-            disabled={deleting}
-          >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="text-destructive">删除</span>}
           </Button>
         </div>
       )
@@ -271,7 +265,7 @@ export default function Domains() {
             <div>
               <p className="text-xs text-muted-foreground">在线</p>
               <p className="font-display text-2xl text-success mt-1">
-                {domains.filter(d => d.uptime_status?.is_up).length}
+                {domains.filter(d => d.uptime_is_up === true).length}
               </p>
             </div>
             <Activity className="w-8 h-8 text-success/50" />
@@ -282,7 +276,7 @@ export default function Domains() {
             <div>
               <p className="text-xs text-muted-foreground">SSL有效</p>
               <p className="font-display text-2xl text-success mt-1">
-                {domains.filter(d => d.ssl_status?.is_valid && !d.ssl_status.is_expired).length}
+                {domains.filter(d => d.ssl_is_valid === true && d.ssl_is_expired !== true).length}
               </p>
             </div>
             <Terminal className="w-8 h-8 text-success/50" />
@@ -293,7 +287,7 @@ export default function Domains() {
             <div>
               <p className="text-xs text-muted-foreground">SSL即将过期</p>
               <p className="font-display text-2xl text-warning mt-1">
-                {domains.filter(d => d.ssl_status?.is_expiring_soon && !d.ssl_status.is_expired).length}
+                {domains.filter(d => d.ssl_is_expiring_soon === true && d.ssl_is_expired !== true).length}
               </p>
             </div>
             <Clock className="w-8 h-8 text-warning/50" />
@@ -339,14 +333,31 @@ export default function Domains() {
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="domainName">域名</Label>
+                  <Label htmlFor="domainName">显示名称</Label>
                   <Input
                     id="domainName"
                     value={newDomainName}
                     onChange={(e) => setNewDomainName(e.target.value)}
-                    placeholder="example.com"
+                    placeholder="我的网站"
                     className="mt-2"
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    用户友好的域名名称
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="domainUrl">域名地址</Label>
+                  <Input
+                    id="domainUrl"
+                    value={newDomainUrl}
+                    onChange={(e) => setNewDomainUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    完整的域名URL地址
+                  </p>
                 </div>
 
                 <div>
@@ -370,7 +381,11 @@ export default function Domains() {
                   <Button
                     variant="outline"
                     className="flex-1"
-                    onClick={() => setIsCreateModalOpen(false)}
+                    onClick={() => {
+                      setIsCreateModalOpen(false)
+                      setNewDomainName('')
+                      setNewDomainUrl('')
+                    }}
                     disabled={creating}
                   >
                     取消
@@ -379,7 +394,7 @@ export default function Domains() {
                     variant="matrix"
                     className="flex-1"
                     onClick={() => createDomain()}
-                    disabled={creating || !newDomainName.trim()}
+                    disabled={creating || !newDomainName.trim() || !newDomainUrl.trim()}
                   >
                     {creating ? (
                       <>

@@ -46,7 +46,9 @@ pub fn create_router(
         // Auth routes
         .route("/api/auth/register", post(handlers::auth::register))
         .route("/api/auth/login", post(handlers::auth::login))
-        .route("/api/auth/refresh", post(handlers::auth::refresh_token));
+        .route("/api/auth/refresh", post(handlers::auth::refresh_token))
+        // Public status page
+        .route("/api/public/status/:org_slug", get(handlers::public::get_public_status));
 
     // Protected routes (auth required)
     let protected_routes = Router::new()
@@ -60,12 +62,17 @@ pub fn create_router(
         .route("/api/organizations/:id/members", post(handlers::organizations::add_member))
         .route("/api/organizations/:id/members/:user_id", delete(handlers::organizations::remove_member))
         .route("/api/organizations/:id/members/:user_id/role", put(handlers::organizations::update_member_role))
+        // Organization statistics and alerts
+        .route("/api/organizations/:id/stats", get(handlers::organizations::get_organization_stats))
+        .route("/api/organizations/:id/alerts", get(handlers::organizations::list_organization_alerts))
         // Domain routes
         .route("/api/domains", get(handlers::domains::list_domains))
         .route("/api/domains", post(handlers::domains::create_domain))
         .route("/api/domains/:id", get(handlers::domains::get_domain))
         .route("/api/domains/:id", put(handlers::domains::update_domain))
         .route("/api/domains/:id", delete(handlers::domains::delete_domain))
+        // Domain statistics
+        .route("/api/domains/:id/statistics", get(handlers::domains::get_domain_statistics))
         // Monitoring routes
         .route("/api/domains/:id/monitoring/uptime/latest", get(handlers::monitoring::get_latest_uptime))
         .route("/api/domains/:id/monitoring/ssl/latest", get(handlers::monitoring::get_latest_ssl))

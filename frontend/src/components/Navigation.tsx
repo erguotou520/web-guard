@@ -49,7 +49,10 @@ export function Navigation() {
         {/* Navigation Links */}
         <div className="hidden md:flex items-center gap-1">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href
+            // Check for exact match or if current path starts with the item's href
+            // This highlights parent routes when on detail pages (e.g., /domains when on /domains/:id)
+            const isActive = location.pathname === item.href ||
+              (item.href !== '/' && location.pathname.startsWith(item.href + '/'))
             return (
               <Link
                 key={item.name}

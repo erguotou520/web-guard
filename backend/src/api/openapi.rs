@@ -30,18 +30,23 @@ use utoipa::OpenApi;
         crate::api::handlers::organizations::add_member,
         crate::api::handlers::organizations::remove_member,
         crate::api::handlers::organizations::update_member_role,
+        crate::api::handlers::organizations::get_organization_stats,
+        crate::api::handlers::organizations::list_organization_alerts,
         // 域名相关
         crate::api::handlers::domains::list_domains,
         crate::api::handlers::domains::create_domain,
         crate::api::handlers::domains::get_domain,
         crate::api::handlers::domains::update_domain,
         crate::api::handlers::domains::delete_domain,
+        crate::api::handlers::domains::get_domain_statistics,
         // 监控相关
         crate::api::handlers::monitoring::get_latest_uptime,
         crate::api::handlers::monitoring::get_latest_ssl,
         crate::api::handlers::monitoring::get_uptime_history,
         crate::api::handlers::monitoring::get_uptime_aggregate,
         crate::api::handlers::monitoring::trigger_check,
+        // 公开接口
+        crate::api::handlers::public::get_public_status,
     ),
     components(
         schemas(
@@ -58,26 +63,47 @@ use utoipa::OpenApi;
             crate::api::handlers::organizations::UpdateOrganizationRequest,
             crate::api::handlers::organizations::AddMemberRequest,
             crate::api::handlers::organizations::UpdateMemberRoleRequest,
+            crate::api::handlers::organizations::OrganizationResponse,
+            crate::api::handlers::organizations::OrganizationsResponse,
+            crate::api::handlers::organizations::MemberResponse,
+            crate::api::handlers::organizations::MembersResponse,
+            crate::api::handlers::organizations::OrganizationStatsResponse,
+            crate::api::handlers::organizations::AlertsResponse,
             crate::db::models::Organization,
             crate::db::models::OrganizationMember,
             crate::db::models::MemberRole,
+            crate::db::models::OrganizationStats,
+            crate::db::models::Alert,
+            crate::db::models::AlertSeverity,
             // 域名
             crate::api::handlers::domains::CreateDomainRequest,
             crate::api::handlers::domains::UpdateDomainRequest,
             crate::api::handlers::domains::DomainQueryParams,
+            crate::api::handlers::domains::DomainResponse,
+            crate::api::handlers::domains::DomainsResponse,
+            crate::api::handlers::domains::DomainsWithStatusResponse,
+            crate::api::handlers::domains::DomainStatisticsResponse,
+            crate::api::handlers::domains::DomainCreateResponse,
             crate::db::models::Domain,
+            crate::db::models::DomainWithStatus,
+            crate::db::models::DomainStatistics,
             // 监控
             crate::api::handlers::monitoring::HistoryQuery,
             crate::api::handlers::monitoring::AggregateQuery,
             crate::api::handlers::monitoring::UptimeStatusResponse,
             crate::api::handlers::monitoring::SslStatusResponse,
+            // 公开接口
+            crate::api::handlers::public::PublicStatusResponse,
+            crate::db::models::PublicDomainStatus,
+            crate::db::models::OrganizationWithDomains,
         )
     ),
     tags(
         (name = "认证", description = "用户认证相关接口"),
         (name = "组织", description = "组织管理相关接口"),
         (name = "域名", description = "域名监控相关接口"),
-        (name = "监控", description = "域名监控数据接口")
+        (name = "监控", description = "域名监控数据接口"),
+        (name = "公开", description = "公开访问接口（无需认证）")
     ),
     modifiers(&SecurityAddon)
 )]

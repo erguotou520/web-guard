@@ -7,13 +7,38 @@ export type OpenAPIComponents = {
     AggregateQuery: {
       period?: string
     },
+    Alert: {
+      created_at: string,
+      description?: string,
+      domain_id: string,
+      id: string,
+      metadata: any,
+      organization_id: string,
+      severity: OpenAPIComponents['schemas']['AlertSeverity'],
+      title: string,
+      type: string,
+      webhook_sent_at?: string,
+      webhook_status_code?: number,
+      webhook_success?: boolean
+    },
+    AlertSeverity: string,
+    AlertsResponse: {
+      data: OpenAPIComponents['schemas']['Alert'][]
+    },
     AuthResponse: {
       access_token: string,
       refresh_token: string,
       user: OpenAPIComponents['schemas']['UserResponse']
     },
     CreateDomainRequest: {
-      name: string
+      /**
+       * @description Display name (user-friendly name for the domain)
+       */
+      display_name: string,
+      /**
+       * @description URL (actual domain address like https://example.com)
+       */
+      url: string
     },
     CreateOrganizationRequest: {
       name: string,
@@ -28,8 +53,56 @@ export type OpenAPIComponents = {
       organization_id: string,
       updated_at: string
     },
+    DomainCreateResponse: {
+      data: OpenAPIComponents['schemas']['Domain'],
+      monitors_created: string[]
+    },
     DomainQueryParams: {
       org_id?: string
+    },
+    DomainResponse: {
+      data: OpenAPIComponents['schemas']['Domain']
+    },
+    DomainStatistics: {
+      avg_response_time_7d?: number,
+      latest_check_time?: string,
+      latest_is_up?: boolean,
+      latest_response_time_ms?: number,
+      latest_status_code?: number,
+      ssl_days_until_expiry?: number,
+      ssl_is_expired?: boolean,
+      ssl_is_expiring_soon?: boolean,
+      ssl_is_valid?: boolean,
+      successful_checks_7d?: number,
+      total_checks_7d?: number,
+      uptime_7d?: (OpenAPIComponents['schemas']['rust_decimal.Decimal'])
+    },
+    DomainStatisticsResponse: {
+      data: OpenAPIComponents['schemas']['DomainStatistics']
+    },
+    DomainWithStatus: {
+      created_at: string,
+      id: string,
+      is_active: boolean,
+      name: string,
+      normalized_name: string,
+      organization_id: string,
+      ssl_days_until_expiry?: number,
+      ssl_is_expired?: boolean,
+      ssl_is_expiring_soon?: boolean,
+      ssl_is_valid?: boolean,
+      updated_at: string,
+      uptime_consecutive_failures?: number,
+      uptime_is_up?: boolean,
+      uptime_response_time_ms?: number,
+      uptime_status_code?: number,
+      url: string
+    },
+    DomainsResponse: {
+      data: OpenAPIComponents['schemas']['Domain'][]
+    },
+    DomainsWithStatusResponse: {
+      data: OpenAPIComponents['schemas']['DomainWithStatus'][]
     },
     ErrorResponse: {
       code: string,
@@ -44,7 +117,13 @@ export type OpenAPIComponents = {
       email: string,
       password: string
     },
+    MemberResponse: {
+      data: OpenAPIComponents['schemas']['OrganizationMember']
+    },
     MemberRole: string,
+    MembersResponse: {
+      data: OpenAPIComponents['schemas']['OrganizationMember'][]
+    },
     Organization: {
       created_at: string,
       id: string,
@@ -60,6 +139,41 @@ export type OpenAPIComponents = {
       organization_id: string,
       role: OpenAPIComponents['schemas']['MemberRole'],
       user_id: string
+    },
+    OrganizationResponse: {
+      data: OpenAPIComponents['schemas']['Organization']
+    },
+    OrganizationStats: {
+      active_domains: number,
+      avg_uptime_7d?: (OpenAPIComponents['schemas']['rust_decimal.Decimal']),
+      critical_alerts_24h: number,
+      online_domains: number,
+      ssl_valid_domains: number,
+      total_domains: number
+    },
+    OrganizationStatsResponse: {
+      data: OpenAPIComponents['schemas']['OrganizationStats']
+    },
+    OrganizationWithDomains: {
+      domains: OpenAPIComponents['schemas']['PublicDomainStatus'][],
+      organization: OpenAPIComponents['schemas']['Organization']
+    },
+    OrganizationsResponse: {
+      data: OpenAPIComponents['schemas']['Organization'][]
+    },
+    PublicDomainStatus: {
+      id: string,
+      is_active: boolean,
+      is_up?: boolean,
+      last_check_time?: string,
+      name: string,
+      response_time_ms?: number,
+      uptime_30d?: (OpenAPIComponents['schemas']['rust_decimal.Decimal']),
+      uptime_7d?: (OpenAPIComponents['schemas']['rust_decimal.Decimal']),
+      url: string
+    },
+    PublicStatusResponse: {
+      data: OpenAPIComponents['schemas']['OrganizationWithDomains']
     },
     RefreshTokenRequest: {
       refresh_token: string
@@ -209,7 +323,7 @@ export type OpenAPIs = {
       params: never,
       headers: never,
       body: never,
-      response: any
+      response: OpenAPIComponents['schemas']['DomainsWithStatusResponse']
     },
     /**
      * Get domain by ID
@@ -281,6 +395,18 @@ export type OpenAPIs = {
       response: OpenAPIComponents['schemas']['UptimeStatusResponse']
     },
     /**
+     * Get domain statistics (comprehensive monitoring data)
+     */
+    '/api/domains/{id}/statistics': {
+      query: never,
+      params: {
+        id: string
+      },
+      headers: never,
+      body: never,
+      response: OpenAPIComponents['schemas']['DomainStatisticsResponse']
+    },
+    /**
      * List user's organizations
      */
     '/api/organizations': {
@@ -303,6 +429,20 @@ export type OpenAPIs = {
       response: any
     },
     /**
+     * List organization alerts
+     */
+    '/api/organizations/{id}/alerts': {
+      query: {
+        limit?: number
+      },
+      params: {
+        id: string
+      },
+      headers: never,
+      body: never,
+      response: OpenAPIComponents['schemas']['AlertsResponse']
+    },
+    /**
      * List organization members
      */
     '/api/organizations/{id}/members': {
@@ -313,6 +453,31 @@ export type OpenAPIs = {
       headers: never,
       body: never,
       response: any
+    },
+    /**
+     * Get organization statistics
+     */
+    '/api/organizations/{id}/stats': {
+      query: never,
+      params: {
+        id: string
+      },
+      headers: never,
+      body: never,
+      response: OpenAPIComponents['schemas']['OrganizationStatsResponse']
+    },
+    /**
+     * Get public monitoring status page by organization slug
+     * @description This endpoint is publicly accessible without authentication
+     */
+    '/api/public/status/{org_slug}': {
+      query: never,
+      params: {
+        org_slug: string
+      },
+      headers: never,
+      body: never,
+      response: OpenAPIComponents['schemas']['PublicStatusResponse']
     },
     /**
      * Health check endpoint

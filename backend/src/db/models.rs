@@ -318,7 +318,7 @@ pub struct SecurityHeaderSnapshot {
 // ============================================================================
 
 /// Alert event
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
 pub struct Alert {
     pub id: Uuid,
     pub organization_id: Uuid,
@@ -336,7 +336,7 @@ pub struct Alert {
 }
 
 /// Alert severity level
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, ToSchema)]
 #[sqlx(type_name = "varchar", rename_all = "lowercase")]
 pub enum AlertSeverity {
     Info,
@@ -451,4 +451,83 @@ pub struct AddMember {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RefreshTokenRequest {
     pub refresh_token: String,
+}
+
+// ============================================================================
+// Statistics & Analytics Models
+// ============================================================================
+
+/// Organization-level statistics
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct OrganizationStats {
+    pub total_domains: i64,
+    pub active_domains: i64,
+    pub online_domains: i64,
+    pub ssl_valid_domains: i64,
+    pub critical_alerts_24h: i64,
+    pub avg_uptime_7d: Option<rust_decimal::Decimal>,
+}
+
+/// Domain with monitoring status (enhanced domain list response)
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct DomainWithStatus {
+    pub id: Uuid,
+    pub organization_id: Uuid,
+    pub name: String, // This will be display_name after migration
+    pub url: String, // This will be the actual URL after migration
+    pub normalized_name: String,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    // Uptime status
+    pub uptime_is_up: Option<bool>,
+    pub uptime_response_time_ms: Option<i32>,
+    pub uptime_status_code: Option<i32>,
+    pub uptime_consecutive_failures: Option<i32>,
+    // SSL status
+    pub ssl_is_valid: Option<bool>,
+    pub ssl_days_until_expiry: Option<i32>,
+    pub ssl_is_expiring_soon: Option<bool>,
+    pub ssl_is_expired: Option<bool>,
+}
+
+/// Domain comprehensive statistics (for detail page)
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct DomainStatistics {
+    // Latest uptime
+    pub latest_is_up: Option<bool>,
+    pub latest_response_time_ms: Option<i32>,
+    pub latest_status_code: Option<i32>,
+    pub latest_check_time: Option<DateTime<Utc>>,
+    // SSL
+    pub ssl_is_valid: Option<bool>,
+    pub ssl_days_until_expiry: Option<i32>,
+    pub ssl_is_expiring_soon: Option<bool>,
+    pub ssl_is_expired: Option<bool>,
+    // 7-day aggregate
+    pub uptime_7d: Option<rust_decimal::Decimal>,
+    pub avg_response_time_7d: Option<i32>,
+    pub successful_checks_7d: Option<i32>,
+    pub total_checks_7d: Option<i32>,
+}
+
+/// Public domain status for status page
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]
+pub struct PublicDomainStatus {
+    pub id: Uuid,
+    pub name: String,
+    pub url: String,
+    pub is_active: bool,
+    pub is_up: Option<bool>,
+    pub response_time_ms: Option<i32>,
+    pub last_check_time: Option<DateTime<Utc>>,
+    pub uptime_7d: Option<rust_decimal::Decimal>,
+    pub uptime_30d: Option<rust_decimal::Decimal>,
+}
+
+/// Organization with domains for public status page
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct OrganizationWithDomains {
+    pub organization: Organization,
+    pub domains: Vec<PublicDomainStatus>,
 }

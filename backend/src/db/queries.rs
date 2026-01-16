@@ -1200,3 +1200,241 @@ pub async fn list_all_active_domains(pool: &PgPool) -> AppResult<Vec<Domain>> {
     .await
     .map_err(AppError::from)
 }
+
+// ============================================================================
+// Statistics & Analytics Queries
+// ============================================================================
+
+/// Get organization-level statistics
+pub async fn get_organization_stats(
+    pool: &PgPool,
+    organization_id: Uuid,
+) -> AppResult<OrganizationStats> {
+    sqlx::query_as::<_, OrganizationStats>(
+        r#"
+        WITH domain_stats AS (
+            SELECT
+                d.id,
+                d.is_active,
+                us.is_up,
+                ssl.is_valid,
+                ssl.is_expired
+            FROM domains d
+            LEFT JOIN LATERAL (
+                SELECT is_up
+                FROM uptime_snapshots
+                WHERE domain_id = d.id
+                ORDER BY check_time DESC
+                LIMIT 1
+            ) us ON true
+            LEFT JOIN LATERAL (
+                SELECT is_valid, is_expired
+                FROM ssl_cert_snapshots
+                WHERE domain_id = d.id
+                ORDER BY check_time DESC
+                LIMIT 1
+            ) ssl ON true
+            WHERE d.organization_id = $1
+        )
+        SELECT
+            COUNT(*)::bigint as total_domains,
+            COUNT(*) FILTER (WHERE is_active = true)::bigint as active_domains,
+            COUNT(*) FILTER (WHERE is_up = true AND is_active = true)::bigint as online_domains,
+            COUNT(*) FILTER (WHERE is_valid = true AND is_expired = false)::bigint as ssl_valid_domains,
+            (
+                SELECT COUNT(*)::bigint
+                FROM alerts
+                WHERE organization_id = $1
+                  AND severity = 'critical'
+                  AND created_at > NOW() - INTERVAL '24 hours'
+            ) as critical_alerts_24h,
+            (
+                SELECT AVG(uptime_percentage)::decimal(5,2)
+                FROM uptime_aggregates ua
+                INNER JOIN domains d ON d.id = ua.domain_id
+                WHERE d.organization_id = $1
+                  AND ua.period_type = 'week'
+                  AND ua.period_start >= NOW() - INTERVAL '7 days'
+            ) as avg_uptime_7d
+        FROM domain_stats
+        "#
+    )
+    .bind(organization_id)
+    .fetch_one(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// List domains with monitoring status (enhanced for domain list page)
+pub async fn list_organization_domains_with_status(
+    pool: &PgPool,
+    organization_id: Uuid,
+) -> AppResult<Vec<DomainWithStatus>> {
+    sqlx::query_as::<_, DomainWithStatus>(
+        r#"
+        SELECT
+            d.id,
+            d.organization_id,
+            d.name,
+            COALESCE(d.url, d.normalized_name) as url,
+            d.normalized_name,
+            d.is_active,
+            d.created_at,
+            d.updated_at,
+            us.is_up as uptime_is_up,
+            us.response_time_ms as uptime_response_time_ms,
+            us.status_code as uptime_status_code,
+            us.consecutive_failures as uptime_consecutive_failures,
+            ssl.is_valid as ssl_is_valid,
+            ssl.days_until_expiry as ssl_days_until_expiry,
+            ssl.is_expiring_soon as ssl_is_expiring_soon,
+            ssl.is_expired as ssl_is_expired
+        FROM domains d
+        LEFT JOIN LATERAL (
+            SELECT is_up, response_time_ms, status_code, consecutive_failures
+            FROM uptime_snapshots
+            WHERE domain_id = d.id
+            ORDER BY check_time DESC
+            LIMIT 1
+        ) us ON true
+        LEFT JOIN LATERAL (
+            SELECT is_valid, days_until_expiry, is_expiring_soon, is_expired
+            FROM ssl_cert_snapshots
+            WHERE domain_id = d.id
+            ORDER BY check_time DESC
+            LIMIT 1
+        ) ssl ON true
+        WHERE d.organization_id = $1
+        ORDER BY d.created_at DESC
+        "#
+    )
+    .bind(organization_id)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// Get comprehensive domain statistics (for domain detail page)
+pub async fn get_domain_statistics(
+    pool: &PgPool,
+    domain_id: Uuid,
+) -> AppResult<Option<DomainStatistics>> {
+    sqlx::query_as::<_, DomainStatistics>(
+        r#"
+        WITH latest_uptime AS (
+            SELECT
+                is_up,
+                response_time_ms,
+                status_code,
+                check_time
+            FROM uptime_snapshots
+            WHERE domain_id = $1
+            ORDER BY check_time DESC
+            LIMIT 1
+        ),
+        latest_ssl AS (
+            SELECT
+                is_valid,
+                days_until_expiry,
+                is_expiring_soon,
+                is_expired
+            FROM ssl_cert_snapshots
+            WHERE domain_id = $1
+            ORDER BY check_time DESC
+            LIMIT 1
+        ),
+        week_aggregate AS (
+            SELECT
+                uptime_percentage,
+                avg_response_time_ms,
+                successful_checks,
+                total_checks
+            FROM uptime_aggregates
+            WHERE domain_id = $1
+              AND period_type = 'week'
+              AND period_start >= NOW() - INTERVAL '7 days'
+            ORDER BY period_start DESC
+            LIMIT 1
+        )
+        SELECT
+            lu.is_up as latest_is_up,
+            lu.response_time_ms as latest_response_time_ms,
+            lu.status_code as latest_status_code,
+            lu.check_time as latest_check_time,
+            ls.is_valid as ssl_is_valid,
+            ls.days_until_expiry as ssl_days_until_expiry,
+            ls.is_expiring_soon as ssl_is_expiring_soon,
+            ls.is_expired as ssl_is_expired,
+            wa.uptime_percentage as uptime_7d,
+            wa.avg_response_time_ms as avg_response_time_7d,
+            wa.successful_checks as successful_checks_7d,
+            wa.total_checks as total_checks_7d
+        FROM latest_uptime lu
+        FULL OUTER JOIN latest_ssl ls ON true
+        FULL OUTER JOIN week_aggregate wa ON true
+        "#
+    )
+    .bind(domain_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(AppError::from)
+}
+
+/// Get organization with domains for public status page
+pub async fn find_organization_by_slug_with_domains(
+    pool: &PgPool,
+    slug: &str,
+) -> AppResult<Option<OrganizationWithDomains>> {
+    // Get organization
+    let org = match find_organization_by_slug(pool, slug).await? {
+        Some(o) => o,
+        None => return Ok(None),
+    };
+
+    // Get domains with latest status
+    let domains = sqlx::query_as::<_, PublicDomainStatus>(
+        r#"
+        SELECT
+            d.id,
+            d.name,
+            COALESCE(d.url, d.normalized_name) as url,
+            d.is_active,
+            us.is_up,
+            us.response_time_ms,
+            us.check_time as last_check_time,
+            (
+                SELECT AVG(uptime_percentage)::decimal(5,2)
+                FROM uptime_aggregates
+                WHERE domain_id = d.id
+                  AND period_type = 'day'
+                  AND period_start >= NOW() - INTERVAL '7 days'
+            ) as uptime_7d,
+            (
+                SELECT AVG(uptime_percentage)::decimal(5,2)
+                FROM uptime_aggregates
+                WHERE domain_id = d.id
+                  AND period_type = 'day'
+                  AND period_start >= NOW() - INTERVAL '30 days'
+            ) as uptime_30d
+        FROM domains d
+        LEFT JOIN LATERAL (
+            SELECT is_up, response_time_ms, check_time
+            FROM uptime_snapshots
+            WHERE domain_id = d.id
+            ORDER BY check_time DESC
+            LIMIT 1
+        ) us ON true
+        WHERE d.organization_id = $1 AND d.is_active = true
+        ORDER BY d.name
+        "#
+    )
+    .bind(org.id)
+    .fetch_all(pool)
+    .await
+    .map_err(AppError::from)?;
+
+    Ok(Some(OrganizationWithDomains {
+        organization: org,
+        domains,
+    }))
+}

@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 use crate::api::routes::AppState;
 use crate::db::queries;
-use crate::db::models::Domain;
+use crate::db::models::{Domain, DomainWithStatus, DomainStatistics};
 use crate::error::{AppError, AppResult};
 use crate::auth::AuthExtractor;
 use validator::Validate;
@@ -24,8 +24,12 @@ pub struct DomainQueryParams {
 // Request types
 #[derive(serde::Deserialize, Validate, ToSchema)]
 pub struct CreateDomainRequest {
+    /// Display name (user-friendly name for the domain)
     #[validate(length(min = 1, max = 255))]
-    pub name: String,
+    pub display_name: String,
+    /// URL (actual domain address like https://example.com)
+    #[validate(length(min = 1, max = 2048))]
+    pub url: String,
 }
 
 #[derive(serde::Deserialize, ToSchema)]
@@ -45,6 +49,16 @@ pub struct DomainsResponse {
 }
 
 #[derive(serde::Serialize, ToSchema)]
+pub struct DomainsWithStatusResponse {
+    pub data: Vec<DomainWithStatus>,
+}
+
+#[derive(serde::Serialize, ToSchema)]
+pub struct DomainStatisticsResponse {
+    pub data: DomainStatistics,
+}
+
+#[derive(serde::Serialize, ToSchema)]
 pub struct DomainCreateResponse {
     pub data: Domain,
     pub monitors_created: Vec<String>,
@@ -60,7 +74,7 @@ pub struct DomainCreateResponse {
         ("org_id" = Option<Uuid>, Query, description = "组织ID（可选，默认使用用户的默认组织）")
     ),
     responses(
-        (status = 200, description = "获取成功"),
+        (status = 200, description = "获取成功", body = DomainsWithStatusResponse),
         (status = 401, description = "未授权"),
         (status = 403, description = "不是组织成员")
     )
@@ -87,7 +101,8 @@ pub async fn list_domains(
         return Err(AppError::authorization("You are not a member of this organization"));
     }
 
-    let domains = queries::list_organization_domains(&state.pool, org_id).await?;
+    // Use enhanced query with monitoring status
+    let domains = queries::list_organization_domains_with_status(&state.pool, org_id).await?;
 
     let response = json!({
         "data": domains
@@ -142,11 +157,14 @@ pub async fn create_domain(
         return Err(AppError::authorization("Viewers cannot create domains"));
     }
 
-    // Normalize domain name
-    let normalized_name = payload.name.to_lowercase();
+    // Normalize URL (remove trailing slashes)
+    let url = payload.url.trim_end_matches('/').to_string();
+    let normalized_name = url.to_lowercase();
 
-    // Create domain
-    let domain = queries::create_domain(&state.pool, org_id, &payload.name, &normalized_name).await?;
+    // Create domain with display_name and url
+    // Note: We still pass name and normalized_name to the old create_domain function
+    // After migration, the migration script will move these to display_name and url
+    let domain = queries::create_domain(&state.pool, org_id, &payload.display_name, &normalized_name).await?;
 
     // Auto-create monitors for the new domain
     let ssl_config = json!({});
@@ -298,4 +316,44 @@ pub async fn delete_domain(
     queries::delete_domain(&state.pool, id).await?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Get domain statistics (comprehensive monitoring data)
+#[utoipa::path(
+    get,
+    path = "/api/domains/{id}/statistics",
+    tag = "域名",
+    security(("BearerAuth" = [])),
+    params(
+        ("id" = Uuid, Path, description = "域名ID")
+    ),
+    responses(
+        (status = 200, description = "获取成功", body = DomainStatisticsResponse),
+        (status = 401, description = "未授权"),
+        (status = 403, description = "不是组织成员"),
+        (status = 404, description = "域名不存在")
+    )
+)]
+pub async fn get_domain_statistics(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    auth: AuthExtractor,
+) -> AppResult<impl IntoResponse> {
+    let domain = queries::find_domain_by_id(&state.pool, id).await?
+        .ok_or_else(|| AppError::not_found("Domain not found"))?;
+
+    // Check if user is a member of the domain's organization
+    let is_member = queries::is_organization_member(&state.pool, domain.organization_id, auth.0.user_id).await?;
+    if !is_member {
+        return Err(AppError::authorization("You are not a member of this organization"));
+    }
+
+    // Get comprehensive statistics
+    let stats = queries::get_domain_statistics(&state.pool, id).await?;
+
+    let response = json!({
+        "data": stats
+    });
+
+    Ok(Json(response))
 }
