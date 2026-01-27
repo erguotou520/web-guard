@@ -1,12 +1,13 @@
 import path from "path"
-import tailwindcss from "@tailwindcss/vite"
+// import tailwindcss from "@tailwindcss/vite"
+import UnoCSS from 'unocss/vite'
 import { defineConfig } from "vite"
 import react from '@vitejs/plugin-react-swc'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    tailwindcss(),
+    UnoCSS(),
     react(),
   ],
   resolve: {
@@ -17,7 +18,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:9001',
+        target: 'http://localhost:9002',
         changeOrigin: true
       }
     }

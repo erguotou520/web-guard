@@ -1,7 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
 import { useAuthStore } from '@/stores/authStore'
 import {
   Terminal,
@@ -34,37 +32,33 @@ export function Navigation() {
   if (!isAuthenticated) return null
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-card/80 backdrop-blur-sm">
-      <div className="flex h-16 items-center justify-between px-6">
+    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-[#1f1f1f] bg-[rgba(10,10,10,0.9)] backdrop-blur-md h-16">
+      <div className="max-w-[1400px] mx-auto h-full flex items-center justify-between px-6">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 bg-primary text-primary-foreground">
+        <Link to="/" className="flex items-center gap-2 decoration-none">
+          <div className="flex items-center justify-center w-8 h-8 bg-[#00ff41] text-black">
             <Shield className="w-5 h-5" />
           </div>
-          <span className="font-display text-xl tracking-wider text-matrix">
+          <span className="text-xl tracking-[0.1em] text-[#00ff41] font-bold font-mono">
             WebGuard
           </span>
         </Link>
 
         {/* Navigation Links */}
-        <div className="hidden md:flex items-center gap-1">
+        <div className="flex items-center gap-1">
           {navigation.map((item) => {
-            // Check for exact match or if current path starts with the item's href
-            // This highlights parent routes when on detail pages (e.g., /domains when on /domains/:id)
-            const isActive = location.pathname === item.href ||
-              (item.href !== '/' && location.pathname.startsWith(item.href + '/'))
+            const isActive = location.pathname === item.href
+            const IconComponent = item.icon
             return (
               <Link
                 key={item.name}
                 to={item.href}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2 text-sm transition-colors',
-                  isActive
-                    ? 'text-matrix border-matrix bg-primary/10'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                )}
+                className={`flex items-center gap-2 px-4 py-2 text-sm decoration-none transition-all font-mono ${isActive
+                    ? 'text-[#00ff41] border border-[#00ff41] bg-[rgba(0,255,65,0.1)]'
+                    : 'text-[#888888] border border-transparent hover:text-[#e0e0e0] hover:bg-[#1a1a1a]'
+                  }`}
               >
-                <item.icon className="w-4 h-4" />
+                <IconComponent className="w-4 h-4" />
                 {item.name}
               </Link>
             )
@@ -77,7 +71,7 @@ export function Navigation() {
           <div className="relative">
             <button
               onClick={() => setOrgDropdownOpen(!orgDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-[#888888] bg-transparent border-none cursor-pointer transition-all font-mono hover:text-[#e0e0e0]"
             >
               <Users className="w-4 h-4" />
               <span>组织</span>
@@ -85,17 +79,17 @@ export function Navigation() {
             </button>
 
             {orgDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border shadow-lg">
+              <div className="absolute right-0 top-full mt-2 w-48 bg-[#0a0a0a] border border-[#1f1f1f] shadow-lg z-[100]">
                 <div className="py-1">
                   <Link
                     to="/organizations"
-                    className="block px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+                    className="block px-4 py-2 text-sm text-[#888888] decoration-none transition-all font-mono hover:text-[#e0e0e0] hover:bg-[#1a1a1a]"
                     onClick={() => setOrgDropdownOpen(false)}
                   >
                     管理组织
                   </Link>
                   <button
-                    className="w-full text-left px-4 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+                    className="w-full text-left px-4 py-2 text-sm text-[#888888] bg-transparent border-none cursor-pointer transition-all font-mono hover:text-[#e0e0e0] hover:bg-[#1a1a1a]"
                     onClick={() => {
                       setOrgDropdownOpen(false)
                       // Add create org logic
@@ -109,15 +103,12 @@ export function Navigation() {
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-[#888888] bg-[transparent] border-none cursor-pointer transition-all font-mono hover:text-[#ff0055]"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </nav>

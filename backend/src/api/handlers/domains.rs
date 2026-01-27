@@ -145,7 +145,8 @@ pub async fn create_domain(
             // Try to get user's default organization
             let orgs = queries::list_user_organizations(&state.pool, auth.0.user_id).await
                 .unwrap_or_default();
-            orgs.first().map(|org| org.id).unwrap_or_else(Uuid::new_v4)
+            orgs.first().map(|org| org.id)
+                .ok_or_else(|| AppError::validation("No organization found. Please create an organization first."))?
         }
     };
 

@@ -136,7 +136,7 @@ impl Config {
         // Server
         cfg = cfg
             .set_default("server.host", "0.0.0.0")?
-            .set_default("server.port", 9001)?
+            .set_default("server.port", 9002)?
             .set_default("server.frontend_dist_path", "../frontend/dist")?;
 
         // Auth

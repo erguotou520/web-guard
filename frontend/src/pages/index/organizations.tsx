@@ -1,12 +1,6 @@
 import { useState } from 'react'
 import { useRequest } from 'ahooks'
 import { client } from '@/api'
-import { DataTable } from '@/components/DataTable'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Label } from '@/components/ui/Label'
-import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import {
   Building2,
   Plus,
@@ -48,7 +42,6 @@ export default function Organizations() {
   // Fetch organizations
   const { data: organizations = [], loading, refresh } = useRequest(async () => {
     const { data, error } = await client.get('/api/organizations')
-    console.log('Organizations API response:', { data, error })
     if (!error && data?.data) {
       return (data.data as Organization[]) || []
     }
@@ -62,7 +55,6 @@ export default function Organizations() {
       const { data, error } = await client.get('/api/organizations/{id}/members', {
         params: { id: selectedOrg.id }
       })
-      console.log('Members API response:', { data, error })
       if (!error && data?.data) {
         return (data.data as OrganizationMember[]) || []
       }
@@ -88,7 +80,7 @@ export default function Organizations() {
       setNewOrgSlug('')
       refresh()
     }
-  })
+  }, { manual: true })
 
   // Delete organization
   const { loading: deleting, run: deleteOrg } = useRequest(async (id: string) => {
@@ -99,48 +91,7 @@ export default function Organizations() {
     if (!error) {
       refresh()
     }
-  })
-
-  // Add member
-  const { loading: addingMember, run: addMember } = useRequest(async (email: string, role: 'admin' | 'member') => {
-    if (!selectedOrg) return
-
-    const { error } = await client.post('/api/organizations/{id}/members', {
-      params: { id: selectedOrg.id },
-      body: { email, role }
-    })
-
-    if (!error) {
-      refreshMembers()
-    }
-  })
-
-  // Remove member
-  const { loading: removingMember, run: removeMember } = useRequest(async (userId: string) => {
-    if (!selectedOrg) return
-
-    const { error } = await client.delete('/api/organizations/{id}/members/{user_id}', {
-      params: { id: selectedOrg.id, user_id: userId }
-    })
-
-    if (!error) {
-      refreshMembers()
-    }
-  })
-
-  // Update member role
-  const { loading: updatingRole, run: updateRole } = useRequest(async (userId: string, role: 'admin' | 'member') => {
-    if (!selectedOrg) return
-
-    const { error } = await client.put('/api/organizations/{id}/members/{user_id}/role', {
-      params: { id: selectedOrg.id, user_id: userId },
-      body: { role }
-    })
-
-    if (!error) {
-      refreshMembers()
-    }
-  })
+  }, { manual: true })
 
   const handleSort = (column: string, direction: 'asc' | 'desc') => {
     setSortColumn(column)
@@ -156,296 +107,273 @@ export default function Organizations() {
     return 0
   })
 
-  const columns = [
-    {
-      key: 'name',
-      title: '组织名称',
-      sortable: true,
-      render: (_: any, row: Organization) => (
-        <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-matrix" />
-          <span className="font-medium">{row.name}</span>
-        </div>
-      )
-    },
-    {
-      key: 'slug',
-      title: '标识符',
-      sortable: true,
-      render: (value: string) => (
-        <code className="text-sm px-2 py-1 bg-muted border border-border">
-          {value}
-        </code>
-      )
-    },
-    {
-      key: 'max_monitors',
-      title: '监控限制',
-      sortable: true,
-      render: (value: number) => (
-        <Badge variant="outline">{value} 个</Badge>
-      )
-    },
-    {
-      key: 'created_at',
-      title: '创建时间',
-      sortable: true,
-      render: (value: string) => format(new Date(value), 'yyyy-MM-dd HH:mm')
-    },
-    {
-      key: 'actions',
-      title: '操作',
-      render: (_: any, row: Organization) => (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setSelectedOrg(row)
-              setIsMembersModalOpen(true)
-            }}
-          >
-            <Users className="w-4 h-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => deleteOrg(row.id)}
-            disabled={deleting}
-          >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 text-destructive" />}
-          </Button>
-        </div>
-      )
-    }
-  ]
-
   return (
-    <div className="space-y-6">
+    <div className="py-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="font-display text-2xl text-matrix flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[#00ff41] flex items-center gap-2 font-mono">
             <Building2 className="w-6 h-6" />
             组织管理
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-[#888888] text-sm mt-1">
             管理监控组织与成员权限
           </p>
         </div>
-        <Button
-          variant="matrix"
+        <button
           onClick={() => setIsCreateModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-[#00ff41] text-black text-sm font-bold font-mono border-none cursor-pointer transition-all shadow-[0_0_20px_rgba(0,255,65,0.3)] hover:bg-[#00cc33] hover:shadow-[0_0_30px_rgba(0,255,65,0.5)]"
         >
           <Plus className="w-4 h-4" />
           创建组织
-        </Button>
+        </button>
       </div>
 
       {/* Organizations Table */}
-      <Card>
-        <DataTable
-          columns={columns}
-          data={sortedOrganizations}
-          onSort={handleSort}
-          sortColumn={sortColumn}
-          sortDirection={sortDirection}
-          rowKey="id"
-          className={loading ? 'opacity-50' : ''}
-        />
+      <div className="bg-[rgba(10,10,10,0.8)] border border-[rgba(0,255,65,0.3)] rounded overflow-hidden">
         {loading && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-6 h-6 animate-spin text-matrix" />
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="w-6 h-6 text-[#00ff41]" style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         )}
+
         {!loading && organizations.length === 0 && (
-          <div className="py-12 text-center">
-            <Building2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-            <p className="text-muted-foreground text-sm">暂无组织</p>
-            <p className="text-muted-foreground/60 text-xs mt-1">点击"创建组织"开始</p>
+          <div className="p-12 text-center">
+            <Building2 className="w-12 h-12 text-[rgba(136,136,136,0.3)] mx-auto mb-4" />
+            <p className="text-[#888888] text-sm">暂无组织</p>
+            <p className="text-[rgba(136,136,136,0.6)] text-xs mt-1">
+              点击"创建组织"开始
+            </p>
           </div>
         )}
-      </Card>
+
+        {!loading && organizations.length > 0 && (
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-[#1f1f1f]">
+                <th className="px-4 py-3 text-left text-xs text-[#888] font-medium font-mono">
+                  组织名称
+                </th>
+                <th className="px-4 py-3 text-left text-xs text-[#888] font-medium font-mono">
+                  标识符
+                </th>
+                <th className="px-4 py-3 text-left text-xs text-[#888] font-medium font-mono">
+                  监控限制
+                </th>
+                <th className="px-4 py-3 text-left text-xs text-[#888] font-medium font-mono">
+                  创建时间
+                </th>
+                <th className="px-4 py-3 text-left text-xs text-[#888] font-medium font-mono">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedOrganizations.map((org) => (
+                <tr key={org.id} className="border-b border-[#1f1f1f] transition-all hover:bg-[rgba(0,255,65,0.05)]">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-[#00ff41]" />
+                      <span className="text-sm font-medium text-[#e0e0e0] font-mono">{org.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm px-2 py-1 bg-[#1a1a1a] border border-[#333] text-[#e0e0e0] font-mono">
+                      {org.slug}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm px-2 py-1 bg-[rgba(0,255,65,0.1)] border border-[#00ff41] text-[#00ff41] font-mono">
+                      {org.max_monitors} 个
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-[#888888] font-mono">
+                      {format(new Date(org.created_at), 'yyyy-MM-dd HH:mm')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedOrg(org)
+                          setIsMembersModalOpen(true)
+                        }}
+                        className="px-3 py-1 text-xs bg-transparent text-[#00ffff] border border-[#00ffff] cursor-pointer font-mono transition-all hover:bg-[rgba(0,255,255,0.1)]"
+                      >
+                        <Users className="w-3 h-3 inline align-middle mr-1" />
+                        成员
+                      </button>
+                      <button
+                        onClick={() => deleteOrg(org.id)}
+                        disabled={deleting}
+                        className="px-3 py-1 text-xs bg-transparent text-[#ff0055] border border-[#ff0055] cursor-pointer font-mono transition-all hover:bg-[rgba(255,0,85,0.1)] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {deleting ? (
+                          <Loader2 className="w-3 h-3 inline align-middle" style={{ animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                          <Trash2 className="w-3 h-3 inline align-middle" />
+                        )}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {/* Create Organization Modal */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md terminal-border">
-            <div className="p-6 pt-10">
-              <h2 className="font-display text-xl text-matrix mb-6 flex items-center gap-2">
+        <div
+          className="fixed inset-0 bg-[rgba(0,0,0,0.8)] flex items-center justify-center z-[1000]"
+          onClick={() => setIsCreateModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-[500px] bg-[#0a0a0a] border border-[#00ff41] rounded p-6 shadow-[0_0_30px_rgba(0,255,65,0.3)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-[#00ff41] flex items-center gap-2 font-mono">
                 <Terminal className="w-5 h-5" />
                 创建新组织
               </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="orgName">组织名称</Label>
-                  <Input
-                    id="orgName"
-                    value={newOrgName}
-                    onChange={(e) => setNewOrgName(e.target.value)}
-                    placeholder="My Organization"
-                    className="mt-2"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="orgSlug">标识符 (可选)</Label>
-                  <Input
-                    id="orgSlug"
-                    value={newOrgSlug}
-                    onChange={(e) => setNewOrgSlug(e.target.value)}
-                    placeholder="my-org"
-                    className="mt-2"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    留空则自动生成
-                  </p>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => setIsCreateModalOpen(false)}
-                    disabled={creating}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    variant="matrix"
-                    className="flex-1"
-                    onClick={() => createOrg()}
-                    disabled={creating || !newOrgName.trim()}
-                  >
-                    {creating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        创建中...
-                      </>
-                    ) : (
-                      <>
-                        <Terminal className="w-4 h-4 mr-2" />
-                        执行创建
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="bg-transparent border-none text-[#888888] cursor-pointer p-1"
+              >
+                ×
+              </button>
             </div>
-          </Card>
+
+            <div className="mb-4">
+              <label className="block text-[13px] text-[#ccc] mb-2 font-mono">
+                组织名称
+              </label>
+              <input
+                type="text"
+                value={newOrgName}
+                onChange={(e) => setNewOrgName(e.target.value)}
+                placeholder="My Organization"
+                className="w-full px-3 py-2.5 bg-[#000000] border border-[#1f1f1f] text-[#e0e0e0] text-sm font-mono outline-none box-border"
+                style={{
+                  borderColor: newOrgName ? '#00ff41' : '#1f1f1f'
+                }}
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-[13px] text-[#ccc] mb-2 font-mono">
+                标识符 (可选)
+              </label>
+              <input
+                type="text"
+                value={newOrgSlug}
+                onChange={(e) => setNewOrgSlug(e.target.value)}
+                placeholder="my-org"
+                className="w-full px-3 py-2.5 bg-[#000000] border border-[#1f1f1f] text-[#e0e0e0] text-sm font-mono outline-none box-border"
+                style={{
+                  borderColor: newOrgSlug ? '#00ff41' : '#1f1f1f'
+                }}
+              />
+              <p className="text-xs text-[#888888] mt-1">
+                留空则自动生成
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                disabled={creating}
+                className="flex-1 px-2.5 py-2.5 text-sm bg-transparent text-[#888888] border border-[#333] cursor-pointer font-mono transition-all hover:bg-[rgba(51,51,51,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => createOrg()}
+                disabled={creating || !newOrgName.trim()}
+                className="flex-1 px-2.5 py-2.5 text-sm font-bold bg-[#00ff41] text-black border-none cursor-pointer font-mono flex items-center justify-center gap-2 transition-all disabled:bg-[#333] disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,255,65,0.3)] disabled:shadow-none hover:bg-[#00cc33] hover:shadow-[0_0_30px_rgba(0,255,65,0.5)]"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4" style={{ animation: 'spin 1s linear infinite' }} />
+                    创建中...
+                  </>
+                ) : (
+                  <>
+                    <Terminal className="w-4x4" />
+                    执行创建
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Members Management Modal */}
       {isMembersModalOpen && selectedOrg && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <Card className="w-full max-w-2xl terminal-border max-h-[80vh] overflow-hidden">
-            <div className="p-6 pt-10">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="font-display text-xl text-matrix flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  成员管理
-                </h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsMembersModalOpen(false)}
-                >
-                  ×
-                </Button>
-              </div>
-
-              <p className="text-sm text-muted-foreground mb-4">
-                组织: <span className="text-matrix font-mono">{selectedOrg.name}</span>
-              </p>
-
-              {/* Add Member Form */}
-              <div className="terminal-border p-4 mb-4 bg-muted/30">
-                <h3 className="text-sm font-medium mb-3">添加成员</h3>
-                <div className="flex gap-3">
-                  <Input
-                    placeholder="用户邮箱"
-                    id="memberEmail"
-                    className="flex-1"
-                  />
-                  <select
-                    id="memberRole"
-                    className="px-3 py-2 bg-background border border-border text-sm"
-                  >
-                    <option value="member">成员</option>
-                    <option value="admin">管理员</option>
-                  </select>
-                  <Button
-                    variant="cyan"
-                    onClick={() => {
-                      const email = (document.getElementById('memberEmail') as HTMLInputElement)?.value
-                      const role = (document.getElementById('memberRole') as HTMLSelectElement)?.value as 'admin' | 'member'
-                      if (email) {
-                        addMember(email, role)
-                        ;(document.getElementById('memberEmail') as HTMLInputElement).value = ''
-                      }
-                    }}
-                    disabled={addingMember}
-                  >
-                    {addingMember ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Members List */}
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {membersLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-matrix" />
-                  </div>
-                ) : members.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    暂无成员
-                  </div>
-                ) : (
-                  members.map((member) => (
-                    <div
-                      key={member.id}
-                      className="flex items-center justify-between p-3 border border-border bg-muted/20"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant={member.role === 'owner' ? 'matrix' : member.role === 'admin' ? 'default' : 'outline'}
-                        >
-                          {member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}
-                        </Badge>
-                        <span className="text-sm font-mono text-muted-foreground">
-                          {member.user_id}
-                        </span>
-                      </div>
-                      {member.role !== 'owner' && (
-                        <div className="flex items-center gap-2">
-                          <select
-                            defaultValue={member.role}
-                            onChange={(e) => updateRole(member.user_id, e.target.value as 'admin' | 'member')}
-                            className="px-2 py-1 text-sm bg-background border border-border"
-                            disabled={updatingRole}
-                          >
-                            <option value="admin">管理员</option>
-                            <option value="member">成员</option>
-                          </select>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeMember(member.user_id)}
-                            disabled={removingMember}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
+        <div
+          className="fixed inset-0 bg-[rgba(0,0,0,0.8)] flex items-center justify-center z-[1000]"
+          onClick={() => setIsMembersModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-[600px] bg-[#0a0a0a] border border-[#00ff41] rounded p-6 shadow-[0_0_30px_rgba(0,255,65,0.3)] max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-[#00ff41] flex items-center gap-2 font-mono">
+                <Users className="w-5 h-5" />
+                成员管理
+              </h2>
+              <button
+                onClick={() => setIsMembersModalOpen(false)}
+                className="bg-transparent border-none text-[#888888] cursor-pointer p-1"
+              >
+                ×
+              </button>
             </div>
-          </Card>
+
+            <p className="text-sm text-[#888888] mb-4">
+              组织: <span className="text-[#00ff41] font-mono">{selectedOrg.name}</span>
+            </p>
+
+            {/* Members List */}
+            <div className="max-h-60 overflow-y-auto">
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-[#00ff41]" style={{ animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : members.length === 0 ? (
+                <div className="text-center py-8 text-[#888888] text-sm">
+                  暂无成员
+                </div>
+              ) : (
+                members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 border border-[#1f1f1f] bg-[#1a1a1a] mb-2 rounded"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs px-2 py-1 border font-mono ${
+                        member.role === 'owner'
+                          ? 'bg-[rgba(0,255,65,0.1)] text-[#00ff41] border-[#00ff41]'
+                          : member.role === 'admin'
+                            ? 'bg-[rgba(0,255,255,0.1)] text-[#00ffff] border-[#00ffff]'
+                            : 'bg-[rgba(136,136,136,0.1)] text-[#888888] border-[#888888]'
+                      }`}>
+                        {member.role === 'owner' ? '所有者' : member.role === 'admin' ? '管理员' : '成员'}
+                      </span>
+                      <span className="text-sm font-mono text-[#888888]">
+                        {member.user_id}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

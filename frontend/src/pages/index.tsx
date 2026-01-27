@@ -1,23 +1,18 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { NavigationWorking } from "@/components/Navigation-working";
+import { Navigation } from "@/components/Navigation";
 import { useAuthStore } from "@/stores";
 
 export default function Layout() {
   const { isAuthenticated } = useAuthStore()
-  console.log('isAuthenticated', isAuthenticated)
 
   if (!isAuthenticated) {
     return <Navigate to="/auth/login" replace />
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#000000', paddingTop: '64px' }}>
-      <NavigationWorking />
-      <main style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        padding: '24px'
-      }}>
+    <div className="min-h-screen bg-background pt-16">
+      <Navigation />
+      <main className="mx-auto max-w-[1400px] px-6">
         <Outlet />
       </main>
     </div>
